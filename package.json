@@ -1,0 +1,17 @@
+{
+  "name": "zoa-arena-blackstag",
+  "version": "1.0.0",
+  "description": "Blackstag: agent + offline bench for The Intuition Game (Zoa Games Agent Arena)",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "start": "node agent/agent.mjs",
+    "practice": "node agent/agent.mjs practice",
+    "ladder": "node agent/agent.mjs ladder",
+    "sim": "node sim/simulate.mjs --seeds 300",
+    "regret": "node analysis/regret.mjs"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.5"
+  }
+}
