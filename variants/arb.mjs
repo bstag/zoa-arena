@@ -44,10 +44,25 @@ export function endgameDutch(g) {
   const cost = cards.reduce((t, c) => t + 1 / c.b, 0);
   if (cost >= 1) return null;                          // can't cover the whole deck
   const tokens = g.players[g.you].tokens;
-  return cards.map((c) => ({
-    zone: c.zone,
-    amount: Math.max(base.MIN_BET, Math.floor((tokens * (1 / c.b) / cost) / 5) * 5),
-  }));
+  // stake ∝ 1/multiplier, rounded to 5s, but the TOTAL must stay ≤ tokens
+  // (server rejects bets exceeding your stack: bad-amount). Every card must
+  // be covered or the guarantee is void — if any line can't be funded at
+  // MIN_BET, abort the dutch entirely and fall back to Kelly.
+  const raw = cards.map((c) => (tokens * (1 / c.b)) / cost);
+  let budget = tokens;
+  const out = [];
+  for (let i = 0; i < cards.length; i++) {
+    let amount = Math.min(Math.floor(raw[i] / 5) * 5, budget);
+    if (amount < base.MIN_BET) return null;
+    budget -= amount;
+    out.push({ zone: cards[i].zone, amount });
+  }
+  // any leftover chips go on the cheapest-coverage line (the wild, 1/5) — still covered
+  if (budget >= base.MIN_BET && out.length) {
+    const wild = out.find((o) => o.zone === "wild");
+    if (wild) wild.amount = Math.min(wild.amount + budget, tokens);
+  }
+  return out.length ? out : null;
 }
 
 export function bets(g) {
