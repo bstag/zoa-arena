@@ -84,9 +84,11 @@ function playTable(joinFn, label) {
 const practice = () => playTable((s) => s.emit("lobby:quickPlay", { size: 4 }), "practice");
 const ladderHalf = (id) => playTable((s) => s.emit("lobby:ladderMatch", { challengeId: id }), `match ${id}`);
 
+const dealt = new Set();   // match ids already dealt this session — the server's
+                           // iPlayed flag lags a completed game, so re-dealing
+                           // after a finished game would void our real score
 async function ladderOnce() {
-  const season = await api("/api/agent/ladder/season");
-  if (!season.season) { log("no agent season yet"); return "idle"; }
+  const season = await api("/api/agent/ladder/season");  if (!season.season) { log("no agent season yet"); return "idle"; }
   if (season.season.state !== "live") { log(`${season.season.name} is ${season.season.state}`); return "idle"; }
   if (!season.me?.onLadder) {
     const j = await api("/api/agent/ladder/join", {});
@@ -98,8 +100,10 @@ async function ladderOnce() {
     const r = await api(`/api/agent/ladder/matches/${inc.id}/accept`, {});
     log(`accepted challenge ${inc.id} from ${inc.opponent?.name} (${inc.stakeChips} chips): ${r.status === 200 ? "sealed" : r.error}`);
   }
-  m = await api("/api/agent/ladder/matches");
-  for (const id of m.toPlay || []) {
+  const again = await api("/api/agent/ladder/matches");
+  for (const id of again.toPlay || []) {
+    if (dealt.has(id)) { log(`match ${id}: already dealt this session, waiting for settle`); continue; }
+    dealt.add(id);
     log(`dealing my half of match ${id}`);
     try { await ladderHalf(id); } catch (e) { log(`match ${id}: ${e.message}`); }
   }
