@@ -10,7 +10,6 @@ import io from "socket.io-client";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { dealerPick, bets } from "./strategy.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 for (const p of [join(HERE, ".env"), join(HERE, "..", ".env")]) {
@@ -21,6 +20,11 @@ for (const p of [join(HERE, ".env"), join(HERE, "..", ".env")]) {
     }
   } catch {}
 }
+// strategy module is selectable: ZOA_STRATEGY=./variants/pokka-style.mjs node agent/agent.mjs
+const stratPath = process.env.ZOA_STRATEGY
+  ? new URL(process.env.ZOA_STRATEGY, `file://${process.cwd()}/`).href
+  : new URL("./strategy.mjs", import.meta.url).href;
+const { dealerPick, bets } = await import(stratPath);
 const BASE = process.env.ZOA_URL || "https://play.zoagames.com";
 const KEY = process.env.IN2IT_API_KEY;
 if (!KEY) { console.error("Set IN2IT_API_KEY in .env"); process.exit(1); }
