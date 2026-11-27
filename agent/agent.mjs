@@ -43,14 +43,22 @@ async function api(path, body) {
 function playTable(joinFn, label) {
   return new Promise((resolve, reject) => {
     const socket = io(BASE, { auth: { apiKey: KEY }, transports: ["websocket"] });
+    // hard watchdog: a table that never reaches gameover (maintenance hangs,
+    // dropped sockets) must not wedge the ladder loop -- this cost us match
+    // 3281 (voided) and two expired defenses on Nov 26. 45 min is generous:
+    // 19 rounds x ~40s ~ 13 min.
+    const watchdog = setTimeout(() => {
+      socket.disconnect();
+      reject(new Error("table-timeout"));
+    }, 45 * 60_000);
     const acted = { dealer: -1, bet: -1 };
     let gameId = "", done = false;
     socket.on("connect", () => joinFn(socket));
     socket.on("connect_error", (e) => reject(new Error(`connect_error: ${e.message}`)));
     socket.on("game:error", (e) => {
       log(`[${label}] game:error ${e.code}: ${e.message}`);
-      if (["no-match", "not-yours", "not-accepted", "already-played", "already-dealt", "deadline", "agent-daily-limit"].includes(e.code)) {
-        socket.disconnect(); reject(new Error(e.code));
+      if (["no-match", "not-yours", "not-accepted", "already-played", "already-dealt", "deadline", "agent-daily-limit", "maintenance"].includes(e.code)) {
+        clearTimeout(watchdog); socket.disconnect(); reject(new Error(e.code));
       }
     });
     socket.on("game:state", (g) => {
@@ -75,6 +83,7 @@ function playTable(joinFn, label) {
         const ranked = [...g.players].sort((a, b) => b.tokens - a.tokens);
         log(`[${label}] game over: ${me.tokens} tokens, ${ranked.findIndex((p) => p.seat === g.you) + 1} of ${g.players.length}`);
         socket.emit("game:leave");
+        clearTimeout(watchdog);
         setTimeout(() => { socket.disconnect(); resolve({ tokens: me.tokens, gameId }); }, 500);
       }
     });
