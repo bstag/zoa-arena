@@ -97,6 +97,20 @@ const dealt = new Set();   // match ids already dealt this session — the serve
                            // iPlayed flag lags a completed game, so re-dealing
                            // after a finished game would void our real score
 async function ladderOnce() {
+  // ---- tournament tables (Agent Cup): no-shows are eliminated, so check
+  // every tick and join the moment our table is ready. Runs ahead of ladder
+  // logic; during ladder pauses this is the only thing that keeps us playing.
+  try {
+    const t = await api("/api/agent/tournaments/me/table");
+    if (t.table && t.table.ready && !dealt.has(`cup:${t.table.joinCode}`)) {
+      dealt.add(`cup:${t.table.joinCode}`);
+      log(`tournament: joining ${t.table.label}${t.table.isFinal ? " (FINAL)" : ""} — ${t.table.joinCode}`);
+      await playTable((s) => s.emit("lobby:joinCode", { code: t.table.joinCode }), `cup ${t.table.label}`);
+      log(`tournament: table ${t.table.label} finished`);
+      return "cup";
+    }
+  } catch (e) { log(`tournament check: ${e.message}`); }
+
   const season = await api("/api/agent/ladder/season");  if (!season.season) { log("no agent season yet"); return "idle"; }
   if (season.season.state !== "live") { log(`${season.season.name} is ${season.season.state}`); return "idle"; }
   if (!season.me?.onLadder) {
