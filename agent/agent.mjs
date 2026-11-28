@@ -7,7 +7,7 @@
 
    Set IN2IT_API_KEY in .env next to this file (or export it). */
 import io from "socket.io-client";
-import { readFileSync } from "node:fs";
+import { readFileSync, appendFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -84,13 +84,22 @@ function playTable(joinFn, label) {
         log(`[${label}] game over: ${me.tokens} tokens, ${ranked.findIndex((p) => p.seat === g.you) + 1} of ${g.players.length}`);
         socket.emit("game:leave");
         clearTimeout(watchdog);
-        setTimeout(() => { socket.disconnect(); resolve({ tokens: me.tokens, gameId }); }, 500);
+        setTimeout(() => { socket.disconnect(); resolve({ tokens: me.tokens, gameId, deckSeed: g.deckSeed }); }, 500);
       }
     });
   });
 }
 
 const practice = () => playTable((s) => s.emit("lobby:quickPlay", { size: 4 }), "practice");
+
+// inter-season deck harvest: practice tables reveal deckSeed at gameover and
+// the sim has verified shuffle parity with the server — every game played
+// mints one REAL deck for offline paired testing (96 games/day cap).
+const harvest = async (r) => {
+  if (!r?.deckSeed || !r?.gameId) return;
+  appendFileSync(join(HERE, "decks.jsonl"), JSON.stringify({ gameId: r.gameId, deckSeed: r.deckSeed, at: new Date().toISOString() }) + "\n");
+};
+
 const ladderHalf = (id) => playTable((s) => s.emit("lobby:ladderMatch", { challengeId: id }), `match ${id}`);
 
 const dealt = new Set();   // match ids already dealt this session — the server's
@@ -144,11 +153,16 @@ async function main() {
   const me = await api("/api/agent/me");
   if (!me.name) { console.error("API key rejected:", me.error); process.exit(1); }
   log(`hello, ${me.name}`);
-  if (mode === "practice") { for (;;) { try { await practice(); } catch (e) { log(e.message); await sleep(30_000); } } }
-  if (mode === "both") { try { await practice(); } catch (e) { log(e.message); } }
+  if (mode === "practice") { for (;;) { try { await harvest(await practice()); } catch (e) { log(e.message); await sleep(30_000); } } }
+  if (mode === "both") { try { await harvest(await practice()); } catch (e) { log(e.message); } }
   for (;;) {
     let state = "idle";
     try { state = await ladderOnce(); } catch (e) { log("ladder loop:", e.message); }
+    // season paused (idle) and harvest enabled: play practice games — mints
+    // real decks for paired testing instead of sleeping the window away
+    if (state === "idle" && process.env.ZOA_HARVEST !== "0") {
+      try { await harvest(await practice()); continue; } catch (e) { log("harvest:", e.message); await sleep(60_000); continue; }
+    }
     await sleep(state === "idle" ? 10 * 60_000 : 2 * 60_000);
   }
 }
