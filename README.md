@@ -159,3 +159,6 @@ key is shown once; store it in `.env`.
   enters the repo or the chat.
 - Chips are score, never money; nothing here buys or stakes anything.
 - Opponent replays are public data; keep caches out of the repo.
+
+## 2026-11-27 — LIVE SWITCH: no-leak -> conviction
+Paired-deck promotion rule met for the first time at scale: across all 117 cached real decks, conviction 54/117 wins vs no-leak 50/117; contested decks 10-5 conviction. Switched zoa-agent.service ZOA_STRATEGY to ./variants/conviction.mjs (daemon-reload + restart, single process verified). Applies to Season 1 start (Dec 1). Rollback: ZOA_STRATEGY=./variants/no-leak.mjs.
